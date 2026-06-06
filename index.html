@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email Task Extractor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f0f;
+    --bg-card: #181818;
+    --bg-secondary: #212121;
+    --bg-tertiary: #2a2a2a;
+    --border: rgba(255,255,255,0.08);
+    --border-hover: rgba(255,255,255,0.15);
+    --text: #f0f0f0;
+    --text-secondary: #888;
+    --text-tertiary: #555;
+    --accent: #e8e0d0;
+    --accent-dim: rgba(232,224,208,0.1);
+    --font: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --pri-urgent-bg: #2d1a1a; --pri-urgent: #f87171; --pri-urgent-border: #7f1d1d;
+    --pri-high-bg: #2d2210; --pri-high: #fb923c; --pri-high-border: #7c2d12;
+    --pri-normal-bg: #0f1f2d; --pri-normal: #60a5fa; --pri-normal-border: #1e3a5f;
+    --pri-low-bg: #1a1f1a; --pri-low: #86efac; --pri-low-border: #14532d;
+    --pri-none-bg: #1e1e1e; --pri-none: #666; --pri-none-border: #333;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* Layout */
+  .app { max-width: 720px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 0.5px solid var(--border); }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 32px; height: 32px; background: var(--accent-dim); border: 0.5px solid var(--border-hover); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .app-name { font-size: 15px; font-weight: 500; color: var(--accent); letter-spacing: -0.01em; }
+  .app-sub { font-size: 12px; color: var(--text-tertiary); margin-top: 1px; }
+  .header-actions { display: flex; gap: 8px; }
+
+  /* Buttons */
+  button { font-family: var(--font); cursor: pointer; border: none; outline: none; transition: all 0.15s; }
+  .btn { background: transparent; border: 0.5px solid var(--border-hover); color: var(--text-secondary); border-radius: var(--radius-sm); padding: 6px 14px; font-size: 13px; font-weight: 400; }
+  .btn:hover { border-color: var(--border-hover); color: var(--text); background: var(--bg-secondary); }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--accent); color: #0f0f0f; border: none; border-radius: var(--radius-sm); padding: 8px 20px; font-size: 13px; font-weight: 500; }
+  .btn-primary:hover { background: #d4ccbc; }
+  .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+  .btn-icon { background: transparent; border: 0.5px solid var(--border); color: var(--text-tertiary); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 13px; }
+  .btn-icon:hover { border-color: var(--border-hover); color: var(--text-secondary); }
+  .btn-send { background: var(--accent); color: #0f0f0f; border: none; border-radius: var(--radius-sm); padding: 9px 22px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 7px; }
+  .btn-send:hover { background: #d4ccbc; }
+  .btn-send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* Cards */
+  .card { background: var(--bg-card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 0.75rem; }
+  .card:last-child { margin-bottom: 0; }
+
+  /* Settings panel */
+  .settings-panel { display: none; background: var(--bg-card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .settings-panel.open { display: block; }
+  .settings-title { font-size: 13px; font-weight: 500; color: var(--accent); margin-bottom: 1.25rem; letter-spacing: 0.02em; text-transform: uppercase; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .settings-grid.full { grid-template-columns: 1fr; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; }
+  .field input, .field select { background: var(--bg-secondary); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px; font-family: var(--font); color: var(--text); outline: none; transition: border-color 0.15s; }
+  .field input:focus, .field select:focus { border-color: var(--border-hover); }
+  .field input[type="password"] { font-family: var(--mono); letter-spacing: 0.1em; }
+  .field-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+  .settings-save { margin-top: 1.25rem; display: flex; align-items: center; gap: 10px; }
+  .save-status { font-size: 12px; color: var(--pri-low); opacity: 0; transition: opacity 0.3s; }
+  .save-status.show { opacity: 1; }
+
+  /* Scanner */
+  .scanner { background: var(--bg-card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .scanner-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+  .scanner-title { font-size: 14px; font-weight: 500; color: var(--text); }
+  .scanner-controls { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 1rem; }
+  .since-block { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-top: 0.25rem; }
+  .since-row { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .since-row label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+  input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+  input[type="datetime-local"] { background: var(--bg-tertiary); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 5px 8px; font-size: 12px; font-family: var(--font); color: var(--text); outline: none; }
+  input[type="datetime-local"]:disabled { opacity: 0.35; cursor: not-allowed; }
+  .since-hint { font-size: 11px; color: var(--text-tertiary); margin-top: 5px; }
+  select { background: var(--bg-secondary); border: 0.5px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; font-family: var(--font); color: var(--text); outline: none; cursor: pointer; }
+  select:focus { border-color: var(--border-hover); }
+
+  /* Status badge */
+  .status { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 3px 9px; border-radius: 20px; font-weight: 400; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .status-ready { background: rgba(134,239,172,0.08); color: var(--pri-low); }
+  .status-ready .status-dot { background: var(--pri-low); }
+  .status-scanning { background: rgba(251,146,60,0.08); color: var(--pri-high); }
+  .status-scanning .status-dot { background: var(--pri-high); animation: pulse 1s infinite; }
+  .status-error { background: rgba(248,113,113,0.08); color: var(--pri-urgent); }
+  .status-error .status-dot { background: var(--pri-urgent); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Stats bar */
+  .stats-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 1.25rem; }
+  .stat { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 0.65rem 1rem; flex: 1; min-width: 60px; text-align: center; border: 0.5px solid var(--border); }
+  .stat-num { font-size: 20px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat-lbl { font-size: 10px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  /* Section label */
+  .sec-lbl { font-size: 10px; font-weight: 500; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.08em; margin: 1.25rem 0 0.6rem; display: flex; align-items: center; gap: 6px; }
+  .sec-lbl::after { content: ''; flex: 1; height: 0.5px; background: var(--border); }
+
+  /* Email task card */
+  .email-card { background: var(--bg-card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: 0.6rem; transition: border-color 0.15s; }
+  .email-card:hover { border-color: var(--border-hover); }
+  .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+  .card-title { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; min-width: 0; line-height: 1.4; }
+  .card-meta { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; }
+  .card-summary { font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px; }
+  .tasks-label { font-size: 10px; font-weight: 500; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; padding-top: 8px; border-top: 0.5px solid var(--border); }
+  .task-row { display: flex; align-items: flex-start; gap: 9px; padding: 6px 0; border-bottom: 0.5px solid var(--border); }
+  .task-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .task-cb { flex-shrink: 0; margin-top: 2px; accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer; }
+  .task-text { font-size: 12px; color: var(--text); flex: 1; line-height: 1.5; padding-top: 1px; }
+
+  /* Priority pill */
+  .pri-wrap { position: relative; flex-shrink: 0; }
+  .pri-btn { font-size: 11px; font-family: var(--font); font-weight: 500; border: 0.5px solid; border-radius: 20px; padding: 2px 9px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; user-select: none; transition: opacity 0.15s; }
+  .pri-btn:hover { opacity: 0.8; }
+  .pri-urgent { background: var(--pri-urgent-bg); color: var(--pri-urgent); border-color: var(--pri-urgent-border); }
+  .pri-high { background: var(--pri-high-bg); color: var(--pri-high); border-color: var(--pri-high-border); }
+  .pri-normal { background: var(--pri-normal-bg); color: var(--pri-normal); border-color: var(--pri-normal-border); }
+  .pri-low { background: var(--pri-low-bg); color: var(--pri-low); border-color: var(--pri-low-border); }
+  .pri-none { background: var(--pri-none-bg); color: var(--pri-none); border-color: var(--pri-none-border); }
+  .pri-menu { display: none; position: absolute; right: 0; top: calc(100% + 5px); background: var(--bg-card); border: 0.5px solid var(--border-hover); border-radius: var(--radius-sm); overflow: hidden; z-index: 100; min-width: 90px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+  .pri-menu.open { display: block; }
+  .pri-option { display: block; width: 100%; padding: 7px 12px; font-size: 12px; font-family: var(--font); font-weight: 500; cursor: pointer; text-align: left; border: none; background: transparent; transition: background 0.1s; }
+  .pri-option:hover { background: var(--bg-secondary); }
+  .opt-urgent { color: var(--pri-urgent); }
+  .opt-high { color: var(--pri-high); }
+  .opt-normal { color: var(--pri-normal); }
+  .opt-low { color: var(--pri-low); }
+  .opt-none { color: var(--pri-none); }
+
+  /* FYI section */
+  .fyi-block { background: var(--bg-secondary); border-radius: var(--radius-sm); padding: 0.75rem 1rem; font-size: 12px; color: var(--text-secondary); line-height: 1.8; border: 0.5px solid var(--border); }
+  .fyi-item strong { color: var(--text); font-weight: 500; }
+
+  /* Action bar */
+  .action-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 0.5px solid var(--border); }
+  .action-left { display: flex; gap: 7px; }
+
+  /* Send result */
+  .send-result { margin-top: 0.75rem; font-size: 12px; border-radius: var(--radius-sm); padding: 8px 12px; }
+  .send-success { background: rgba(134,239,172,0.08); color: var(--pri-low); border: 0.5px solid var(--pri-low-border); }
+  .send-error { background: rgba(248,113,113,0.08); color: var(--pri-urgent); border: 0.5px solid var(--pri-urgent-border); }
+
+  /* Empty / loading states */
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--text-tertiary); font-size: 13px; }
+  .empty-icon { font-size: 28px; margin-bottom: 10px; opacity: 0.3; }
+  .loading { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 13px; padding: 1.5rem 0; }
+  .spinner { width: 14px; height: 14px; border: 1.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Setup warning */
+  .setup-warning { background: rgba(251,146,60,0.06); border: 0.5px solid var(--pri-high-border); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 13px; color: var(--pri-high); display: none; }
+  .setup-warning.show { display: block; }
+  .setup-warning strong { font-weight: 500; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 2px; }
+
+  /* Chevron icon inline */
+  .chevron { display: inline-block; width: 8px; height: 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg) translateY(-2px); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">✉</div>
+      <div>
+        <div class="app-name">Email Task Extractor</div>
+        <div class="app-sub">Gmail · Claude · ClickUp</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" onclick="toggleSettings()" title="Settings">⚙</button>
+    </div>
+  </div>
+
+  <!-- Setup warning -->
+  <div class="setup-warning" id="setup-warning">
+    <strong>Setup required —</strong> open settings (⚙) and add your API keys before scanning.
+  </div>
+
+  <!-- Settings panel -->
+  <div class="settings-panel" id="settings-panel">
+    <div class="settings-title">Settings</div>
+    <div class="settings-grid full" style="margin-bottom:1rem">
+      <div class="field">
+        <label>Anthropic API Key</label>
+        <input type="password" id="s-anthropic-key" placeholder="sk-ant-...">
+        <div class="field-hint">Used for email analysis via Claude Haiku. Stored locally only.</div>
+      </div>
+    </div>
+    <div class="settings-grid" style="margin-bottom:1rem">
+      <div class="field">
+        <label>Gmail OAuth Client ID</label>
+        <input type="text" id="s-gmail-client-id" placeholder="xxxxxx.apps.googleusercontent.com">
+        <div class="field-hint">From Google Cloud Console. <a href="https://console.cloud.google.com" target="_blank" style="color:var(--text-secondary)">Get one →</a></div>
+      </div>
+      <div class="field">
+        <label>ClickUp API Key</label>
+        <input type="text" id="s-clickup-key" placeholder="pk_...">
+        <div class="field-hint">From ClickUp → Settings → Apps. <a href="https://app.clickup.com/settings/apps" target="_blank" style="color:var(--text-secondary)">Get one →</a></div>
+      </div>
+    </div>
+    <div class="settings-grid">
+      <div class="field">
+        <label>Default ClickUp List ID</label>
+        <input type="text" id="s-clickup-list-id" placeholder="901417029499">
+        <div class="field-hint">The numeric list ID to send tasks to.</div>
+      </div>
+      <div class="field">
+        <label>Default ClickUp List Name</label>
+        <input type="text" id="s-clickup-list-name" placeholder="Email to Task Automation">
+      </div>
+    </div>
+    <div class="settings-save">
+      <button class="btn-primary" onclick="saveSettings()">Save settings</button>
+      <span class="save-status" id="save-status">✓ Saved</span>
+    </div>
+  </div>
+
+  <!-- Scanner -->
+  <div class="scanner">
+    <div class="scanner-top">
+      <div class="scanner-title">Inbox scanner</div>
+      <div class="status status-ready" id="status-badge">
+        <div class="status-dot"></div>
+        <span id="status-text">Ready</span>
+      </div>
+    </div>
+
+    <div class="scanner-controls">
+      <div class="field">
+        <label>Emails to scan</label>
+        <select id="email-count">
+          <option value="10">Last 10</option>
+          <option value="20" selected>Last 20</option>
+          <option value="30">Last 30</option>
+          <option value="50">Last 50</option>
+          <option value="100">Last 100</option>
+          <option value="all">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Time window</label>
+        <select id="time-window">
+          <option value="1">Last 24 hours</option>
+          <option value="3" selected>Last 3 days</option>
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 2 weeks</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>ClickUp list</label>
+        <select id="clickup-list">
+          <option value="" id="default-list-option">Loading...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="since-block">
+      <div class="since-row">
+        <input type="checkbox" id="since-toggle" checked onchange="toggleSince()">
+        <label for="since-toggle">Exclude emails before:</label>
+        <input type="datetime-local" id="since-dt">
+      </div>
+      <div class="since-hint" id="since-hint">No previous scan recorded.</div>
+    </div>
+
+    <div style="margin-top:1rem">
+      <button class="btn-primary" id="scan-btn" onclick="startScan()">Scan inbox</button>
+    </div>
+  </div>
+
+  <!-- Results area -->
+  <div id="results-area"></div>
+
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+const S = {
+  anthropicKey: '',
+  gmailClientId: '',
+  clickupKey: '',
+  clickupListId: '901417029499',
+  clickupListName: 'Email to Task Automation',
+  lastScanUTC: null,
+  gmailToken: null,
+};
+
+let extractedTasks = [];
+let allThreadIds = [];
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+function init() {
+  loadSettings();
+  loadLastScan();
+  populateListDropdown();
+  checkSetup();
+}
+
+function loadSettings() {
+  S.anthropicKey     = localStorage.getItem('eta_anthropic_key') || '';
+  S.gmailClientId    = localStorage.getItem('eta_gmail_client_id') || '';
+  S.clickupKey       = localStorage.getItem('eta_clickup_key') || '';
+  S.clickupListId    = localStorage.getItem('eta_clickup_list_id') || '901417029499';
+  S.clickupListName  = localStorage.getItem('eta_clickup_list_name') || 'Email to Task Automation';
+
+  document.getElementById('s-anthropic-key').value    = S.anthropicKey;
+  document.getElementById('s-gmail-client-id').value  = S.gmailClientId;
+  document.getElementById('s-clickup-key').value      = S.clickupKey;
+  document.getElementById('s-clickup-list-id').value  = S.clickupListId;
+  document.getElementById('s-clickup-list-name').value = S.clickupListName;
+}
+
+function loadLastScan() {
+  const stored = localStorage.getItem('eta_last_scan_utc');
+  if (stored) {
+    S.lastScanUTC = stored;
+    const d = new Date(stored);
+    document.getElementById('since-dt').value = toLocalDatetimeValue(d);
+    document.getElementById('since-hint').textContent =
+      'Last scan: ' + d.toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
+  } else {
+    document.getElementById('since-toggle').checked = false;
+    document.getElementById('since-dt').disabled = true;
+    document.getElementById('since-hint').textContent = 'No previous scan — all emails in the time window will be scanned.';
+  }
+}
+
+function populateListDropdown() {
+  const sel = document.getElementById('clickup-list');
+  sel.innerHTML = `<option value="${S.clickupListId}">${S.clickupListName}</option>`;
+}
+
+function checkSetup() {
+  const missing = !S.anthropicKey || !S.gmailClientId || !S.clickupKey;
+  document.getElementById('setup-warning').classList.toggle('show', missing);
+}
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+function toggleSettings() {
+  document.getElementById('settings-panel').classList.toggle('open');
+}
+
+function saveSettings() {
+  S.anthropicKey    = document.getElementById('s-anthropic-key').value.trim();
+  S.gmailClientId   = document.getElementById('s-gmail-client-id').value.trim();
+  S.clickupKey      = document.getElementById('s-clickup-key').value.trim();
+  S.clickupListId   = document.getElementById('s-clickup-list-id').value.trim();
+  S.clickupListName = document.getElementById('s-clickup-list-name').value.trim();
+
+  localStorage.setItem('eta_anthropic_key',       S.anthropicKey);
+  localStorage.setItem('eta_gmail_client_id',     S.gmailClientId);
+  localStorage.setItem('eta_clickup_key',         S.clickupKey);
+  localStorage.setItem('eta_clickup_list_id',     S.clickupListId);
+  localStorage.setItem('eta_clickup_list_name',   S.clickupListName);
+
+  populateListDropdown();
+  checkSetup();
+
+  const st = document.getElementById('save-status');
+  st.classList.add('show');
+  setTimeout(() => st.classList.remove('show'), 2000);
+}
+
+// ─── Since toggle ─────────────────────────────────────────────────────────────
+function toggleSince() {
+  const checked = document.getElementById('since-toggle').checked;
+  document.getElementById('since-dt').disabled = !checked;
+}
+
+// ─── Gmail OAuth ──────────────────────────────────────────────────────────────
+function gmailAuth() {
+  return new Promise((resolve, reject) => {
+    if (S.gmailToken && S.gmailToken.expires > Date.now()) return resolve(S.gmailToken.access_token);
+
+    const params = new URLSearchParams({
+      client_id: S.gmailClientId,
+      redirect_uri: window.location.origin + window.location.pathname,
+      response_type: 'token',
+      scope: 'https://www.googleapis.com/auth/gmail.readonly',
+      prompt: 'consent',
+    });
+
+    const popup = window.open('https://accounts.google.com/o/oauth2/v2/auth?' + params, 'gmail_auth', 'width=500,height=600');
+
+    const interval = setInterval(() => {
+      try {
+        const url = popup.location.href;
+        if (url.includes('access_token')) {
+          clearInterval(interval);
+          popup.close();
+          const hash = new URLSearchParams(popup.location.hash.slice(1));
+          const token = hash.get('access_token');
+          const expiresIn = parseInt(hash.get('expires_in') || '3600');
+          S.gmailToken = { access_token: token, expires: Date.now() + expiresIn * 1000 };
+          resolve(token);
+        }
+      } catch(e) {}
+      if (popup.closed) { clearInterval(interval); reject(new Error('Auth cancelled')); }
+    }, 300);
+  });
+}
+
+// ─── Gmail fetch ──────────────────────────────────────────────────────────────
+async function fetchEmails(token, maxResults, daysBack, sinceISO) {
+  let query = `in:inbox -in:draft -in:sent newer_than:${daysBack}d`;
+  if (sinceISO) {
+    const d = new Date(sinceISO);
+    const dateStr = `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+    query += ` after:${dateStr}`;
+  }
+
+  const count = maxResults === 'all' ? 500 : parseInt(maxResults);
+  const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads?maxResults=${count}&q=${encodeURIComponent(query)}`;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (!res.ok) throw new Error('Gmail API error: ' + res.status);
+  const data = await res.json();
+  return data.threads || [];
+}
+
+async function fetchThreadDetails(token, threadId) {
+  const url = `https://gmail.googleapis.com/gmail/v1/users/me/threads/${threadId}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const msg = data.messages?.[0];
+  if (!msg) return null;
+  const headers = msg.payload?.headers || [];
+  const get = name => headers.find(h => h.name === name)?.value || '';
+  return {
+    threadId,
+    subject: get('Subject') || '(no subject)',
+    from: get('From'),
+    date: get('Date'),
+    snippet: msg.snippet || '',
+  };
+}
+
+// ─── Analyse with Claude ──────────────────────────────────────────────────────
+async function analyseEmails(threads) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': S.anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      system: `You are an email analyst. Analyse the provided emails and return ONLY a valid JSON object — no markdown, no explanation.
+
+Return this exact structure:
+{
+  "emails": [
+    {
+      "threadId": "...",
+      "subject": "...",
+      "from": "...",
+      "date": "...",
+      "important": true or false,
+      "summary": "1-2 sentence summary",
+      "tasks": [
+        {
+          "id": "unique_id_string",
+          "text": "Clear actionable task",
+          "priority": "urgent|high|normal|low",
+          "dueDate": "YYYY-MM-DD or null"
+        }
+      ]
+    }
+  ]
+}
+
+Importance rules: mark important if the email requires a response, has a deadline, involves money/contracts/legal, is time-sensitive, or is addressed personally to the user.
+Skip newsletters, promotions, automated alerts, and FYI-only emails — mark those as important: false with empty tasks array.
+Only extract real actionable tasks. Be concise and specific.`,
+      messages: [{
+        role: 'user',
+        content: `Analyse these emails and extract tasks:\n${JSON.stringify(threads)}`
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Claude API error: ' + res.status);
+  }
+
+  const data = await res.json();
+  const text = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  const clean = text.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+// ─── ClickUp ──────────────────────────────────────────────────────────────────
+async function createClickUpTask(task, listId) {
+  const body = {
+    name: task.name,
+    description: task.desc || '',
+  };
+  if (task.priority && task.priority !== 'none') {
+    const priMap = { urgent: 1, high: 2, normal: 3, low: 4 };
+    body.priority = priMap[task.priority] || null;
+  }
+  if (task.due) body.due_date = new Date(task.due).getTime();
+
+  const res = await fetch(`https://api.clickup.com/api/v2/list/${listId}/task`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': S.clickupKey,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.err || 'ClickUp error: ' + res.status);
+  }
+  return res.json();
+}
+
+// ─── Priority UI ──────────────────────────────────────────────────────────────
+function toggleMenu(btn) {
+  const menu = btn.nextElementSibling;
+  const isOpen = menu.classList.contains('open');
+  document.querySelectorAll('.pri-menu.open').forEach(m => m.classList.remove('open'));
+  if (!isOpen) menu.classList.add('open');
+}
+
+function setPri(opt, val) {
+  const menu = opt.closest('.pri-menu');
+  const btn = menu.previousElementSibling;
+  btn.className = 'pri-btn pri-' + val;
+  btn.dataset.value = val;
+  btn.innerHTML = val + ' <span class="chevron"></span>';
+  btn.onclick = function(){ toggleMenu(this); };
+  menu.classList.remove('open');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.pri-wrap')) {
+    document.querySelectorAll('.pri-menu.open').forEach(m => m.classList.remove('open'));
+  }
+});
+
+function priMenu(val) {
+  return `
+    <div class="pri-wrap">
+      <div class="pri-btn pri-${val}" onclick="toggleMenu(this)" data-value="${val}">${val} <span class="chevron"></span></div>
+      <div class="pri-menu">
+        <button class="pri-option opt-urgent" onclick="setPri(this,'urgent')">urgent</button>
+        <button class="pri-option opt-high" onclick="setPri(this,'high')">high</button>
+        <button class="pri-option opt-normal" onclick="setPri(this,'normal')">normal</button>
+        <button class="pri-option opt-low" onclick="setPri(this,'low')">low</button>
+        <button class="pri-option opt-none" onclick="setPri(this,'none')">none</button>
+      </div>
+    </div>`;
+}
+
+// ─── Scan ─────────────────────────────────────────────────────────────────────
+function setStatus(text, type) {
+  const badge = document.getElementById('status-badge');
+  badge.className = 'status status-' + type;
+  document.getElementById('status-text').textContent = text;
+}
+
+async function startScan() {
+  if (!S.anthropicKey || !S.gmailClientId || !S.clickupKey) {
+    document.getElementById('setup-warning').classList.add('show');
+    document.getElementById('settings-panel').classList.add('open');
+    return;
+  }
+
+  const btn = document.getElementById('scan-btn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  setStatus('Authenticating...', 'scanning');
+  document.getElementById('results-area').innerHTML = '';
+  extractedTasks = [];
+  allThreadIds = [];
+
+  try {
+    // Auth
+    const token = await gmailAuth();
+
+    // Fetch thread list
+    setStatus('Fetching emails...', 'scanning');
+    const count = document.getElementById('email-count').value;
+    const days  = document.getElementById('time-window').value;
+    const sinceEnabled = document.getElementById('since-toggle').checked;
+    const sinceVal = sinceEnabled ? new Date(document.getElementById('since-dt').value).toISOString() : null;
+
+    const threads = await fetchEmails(token, count, days, sinceVal);
+
+    if (!threads.length) {
+      document.getElementById('results-area').innerHTML = `<div class="empty"><div class="empty-icon">📭</div>No emails found in this time window.</div>`;
+      setStatus('Ready', 'ready');
+      btn.disabled = false;
+      btn.textContent = 'Scan inbox';
+      return;
+    }
+
+    allThreadIds = threads.map(t => t.id);
+
+    // Fetch thread details
+    setStatus('Loading threads...', 'scanning');
+    const details = (await Promise.all(threads.slice(0, 50).map(t => fetchThreadDetails(token, t.id)))).filter(Boolean);
+
+    // Analyse
+    setStatus('Analysing with Claude...', 'scanning');
+    const analysis = await analyseEmails(details);
+    const emails = analysis.emails || [];
+
+    const important = emails.filter(e => e.important);
+    const withTasks = emails.filter(e => e.important && e.tasks?.length);
+    const noTasks   = emails.filter(e => e.important && !e.tasks?.length);
+    extractedTasks  = emails.flatMap(e => (e.tasks||[]).map(t => ({
+      ...t, emailSubject: e.subject, emailFrom: e.from, threadId: e.threadId
+    })));
+
+    // Save last scan time
+    const now = new Date().toISOString();
+    localStorage.setItem('eta_last_scan_utc', now);
+    S.lastScanUTC = now;
+    document.getElementById('since-dt').value = toLocalDatetimeValue(new Date(now));
+    document.getElementById('since-hint').textContent = 'Last scan: ' + new Date(now).toLocaleString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
+    document.getElementById('since-toggle').checked = true;
+    document.getElementById('since-dt').disabled = false;
+
+    renderResults(threads.length, important.length, extractedTasks.length, withTasks, noTasks);
+    setStatus('Done', 'ready');
+
+  } catch(err) {
+    console.error(err);
+    setStatus('Error', 'error');
+    document.getElementById('results-area').innerHTML = `<div class="empty" style="color:var(--pri-urgent)"><div class="empty-icon">⚠</div>${err.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Scan inbox';
+}
+
+// ─── Render results ───────────────────────────────────────────────────────────
+function renderResults(scanned, important, taskCount, withTasks, noTasks) {
+  const listId   = document.getElementById('clickup-list').value || S.clickupListId;
+  const listName = document.getElementById('clickup-list').options[document.getElementById('clickup-list').selectedIndex]?.text || S.clickupListName;
+
+  let html = `
+    <div class="stats-bar">
+      <div class="stat"><div class="stat-num">${scanned}</div><div class="stat-lbl">Scanned</div></div>
+      <div class="stat"><div class="stat-num">${important}</div><div class="stat-lbl">Important</div></div>
+      <div class="stat"><div class="stat-num">${taskCount}</div><div class="stat-lbl">Tasks</div></div>
+      <div class="stat"><div class="stat-num" id="sel-count">${taskCount}</div><div class="stat-lbl">Selected</div></div>
+    </div>`;
+
+  if (withTasks.length) {
+    html += `<div class="sec-lbl">Emails with tasks</div>`;
+    withTasks.forEach(email => {
+      const tasks = email.tasks || [];
+      const pri = tasks[0]?.priority || 'normal';
+      html += `
+        <div class="email-card">
+          <div class="card-header">
+            <div class="card-title">${escHtml(email.subject)}</div>
+            ${priMenu(pri)}
+          </div>
+          <div class="card-meta">${escHtml(email.from || '')} · ${formatDate(email.date)}</div>
+          <div class="card-summary">${escHtml(email.summary || '')}</div>
+          <div class="tasks-label">Tasks</div>
+          ${tasks.map(t => `
+            <div class="task-row">
+              <input type="checkbox" class="task-cb" data-id="${t.id}" checked onchange="updateSelCount()">
+              <span class="task-text">${escHtml(t.text)}</span>
+            </div>`).join('')}
+        </div>`;
+    });
+  }
+
+  if (noTasks.length) {
+    html += `<div class="sec-lbl">Important — no tasks</div><div class="fyi-block">`;
+    noTasks.forEach(e => {
+      html += `<div class="fyi-item"><strong>${escHtml(e.subject)}</strong> — ${escHtml(e.summary || '')}</div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (!withTasks.length && !noTasks.length) {
+    html += `<div class="empty"><div class="empty-icon">✓</div>No important emails found. Try a wider time window.</div>`;
+  }
+
+  if (withTasks.length) {
+    html += `
+      <div class="action-bar">
+        <div class="action-left">
+          <button class="btn" onclick="selectAll(true)">All</button>
+          <button class="btn" onclick="selectAll(false)">None</button>
+        </div>
+        <button class="btn-send" id="send-btn" onclick="sendToClickUp('${listId}')">
+          Send to ClickUp →
+        </button>
+      </div>
+      <div id="send-result"></div>`;
+  }
+
+  document.getElementById('results-area').innerHTML = html;
+}
+
+// ─── Send to ClickUp ──────────────────────────────────────────────────────────
+async function sendToClickUp(listId) {
+  const checked = Array.from(document.querySelectorAll('.task-cb:checked')).map(c => c.dataset.id);
+  if (!checked.length) return;
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  const tasksToSend = extractedTasks.filter(t => checked.includes(t.id)).map(t => {
+    const card = document.querySelector(`[data-id="${t.id}"]`)?.closest('.email-card');
+    const priVal = card?.querySelector('.pri-btn')?.dataset.value || t.priority;
+    return { ...t, priority: priVal };
+  });
+
+  let created = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (const task of tasksToSend) {
+    try {
+      await createClickUpTask({
+        name: task.text,
+        desc: `From email: "${task.emailSubject}" (${task.emailFrom})`,
+        priority: task.priority,
+        due: task.dueDate,
+      }, listId);
+      created++;
+    } catch(err) {
+      failed++;
+      errors.push(err.message);
+    }
+  }
+
+  const resultEl = document.getElementById('send-result');
+  if (failed === 0) {
+    resultEl.innerHTML = `<div class="send-result send-success">✓ ${created} task${created !== 1 ? 's' : ''} sent to ClickUp successfully.</div>`;
+    // Fade out sent tasks
+    document.querySelectorAll('.task-cb:checked').forEach(cb => {
+      cb.closest('.task-row').style.opacity = '0.35';
+      cb.checked = false;
+    });
+    updateSelCount();
+  } else {
+    resultEl.innerHTML = `<div class="send-result send-error">Sent ${created}, failed ${failed}. ${errors[0] || ''}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Send to ClickUp →';
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function updateSelCount() {
+  const n = document.querySelectorAll('.task-cb:checked').length;
+  const el = document.getElementById('sel-count');
+  if (el) el.textContent = n;
+  const btn = document.getElementById('send-btn');
+  if (btn) btn.disabled = n === 0;
+}
+
+function selectAll(val) {
+  document.querySelectorAll('.task-cb').forEach(c => c.checked = val);
+  updateSelCount();
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toLocalDatetimeValue(d) {
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  } catch { return dateStr; }
+}
+
+// ─── Start ────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
