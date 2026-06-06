@@ -699,7 +699,7 @@ async function startScan() {
     document.getElementById('since-toggle').checked = true;
     document.getElementById('since-dt').disabled = false;
 
-    renderResults(threads.length, important.length, extractedTasks.length, withTasks, noTasks);
+    renderResults(threads.length, important.length, extractedTasks.length, withTasks, noTasks, emails);
     setStatus('Done', 'ready');
 
   } catch(err) {
@@ -713,9 +713,14 @@ async function startScan() {
 }
 
 // ─── Render results ───────────────────────────────────────────────────────────
-function renderResults(scanned, important, taskCount, withTasks, noTasks) {
+function gmailLink(threadId) {
+  return `https://mail.google.com/mail/u/0/#inbox/${threadId}`;
+}
+
+function renderResults(scanned, important, taskCount, withTasks, noTasks, allEmails) {
   const listId   = document.getElementById('clickup-list').value || S.clickupListId;
   const listName = document.getElementById('clickup-list').options[document.getElementById('clickup-list').selectedIndex]?.text || S.clickupListName;
+  const clickupUrl = `https://app.clickup.com/${S.clickupListId}/v/l/li/${listId}`;
 
   let html = `
     <div class="stats-bar">
@@ -730,13 +735,21 @@ function renderResults(scanned, important, taskCount, withTasks, noTasks) {
     withTasks.forEach(email => {
       const tasks = email.tasks || [];
       const pri = tasks[0]?.priority || 'normal';
+      const emailUrl = gmailLink(email.threadId);
       html += `
         <div class="email-card">
           <div class="card-header">
-            <div class="card-title">${escHtml(email.subject)}</div>
+            <div class="card-title">
+              <a href="${emailUrl}" target="_blank" style="color:inherit;text-decoration:none;" title="Open in Gmail">
+                ${escHtml(email.subject)}
+              </a>
+            </div>
             ${priMenu(pri)}
           </div>
-          <div class="card-meta">${escHtml(email.from || '')} · ${formatDate(email.date)}</div>
+          <div class="card-meta">
+            ${escHtml(email.from || '')} · ${formatDate(email.date)}
+            <a href="${emailUrl}" target="_blank" style="color:var(--text-tertiary);text-decoration:none;margin-left:8px;font-size:10px;" title="Open in Gmail">↗ Gmail</a>
+          </div>
           <div class="card-summary">${escHtml(email.summary || '')}</div>
           <div class="tasks-label">Tasks</div>
           ${tasks.map(t => `
@@ -751,7 +764,18 @@ function renderResults(scanned, important, taskCount, withTasks, noTasks) {
   if (noTasks.length) {
     html += `<div class="sec-lbl">Important — no tasks</div><div class="fyi-block">`;
     noTasks.forEach(e => {
-      html += `<div class="fyi-item"><strong>${escHtml(e.subject)}</strong> — ${escHtml(e.summary || '')}</div>`;
+      const emailUrl = gmailLink(e.threadId);
+      html += `<div class="fyi-item"><strong>${escHtml(e.subject)}</strong> — ${escHtml(e.summary || '')} <a href="${emailUrl}" target="_blank" style="color:var(--text-tertiary);text-decoration:none;font-size:11px;">↗ Gmail</a></div>`;
+    });
+    html += `</div>`;
+  }
+
+  // FYI — not important emails (newsletters, promos etc)
+  const notImportant = (allEmails || []).filter(e => !e.important);
+  if (notImportant.length) {
+    html += `<div class="sec-lbl">Skipped — newsletters & promos</div><div class="fyi-block" style="opacity:0.6">`;
+    notImportant.forEach(e => {
+      html += `<div class="fyi-item" style="font-size:11px">${escHtml(e.subject)} <span style="color:var(--text-tertiary)">· ${escHtml((e.from||'').replace(/<.*>/, '').trim())}</span></div>`;
     });
     html += `</div>`;
   }
@@ -766,6 +790,7 @@ function renderResults(scanned, important, taskCount, withTasks, noTasks) {
         <div class="action-left">
           <button class="btn" onclick="selectAll(true)">All</button>
           <button class="btn" onclick="selectAll(false)">None</button>
+          <a href="https://app.clickup.com/90141315433/v/l/li/${listId}" target="_blank" class="btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px;">View ClickUp ↗</a>
         </div>
         <button class="btn-send" id="send-btn" onclick="sendToClickUp('${listId}')">
           Send to ClickUp →
@@ -798,9 +823,10 @@ async function sendToClickUp(listId) {
 
   for (const task of tasksToSend) {
     try {
+      const gmailUrl = `https://mail.google.com/mail/u/0/#inbox/${task.threadId}`;
       await createClickUpTask({
         name: task.text,
-        desc: `From email: "${task.emailSubject}" (${task.emailFrom})`,
+        desc: `From email: "${task.emailSubject}"\nFrom: ${task.emailFrom}\n\nOpen in Gmail: ${gmailUrl}`,
         priority: task.priority,
         due: task.dueDate,
       }, listId);
